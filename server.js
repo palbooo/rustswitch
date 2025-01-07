@@ -13,11 +13,7 @@ const { connectDB, Switch, SwitchLog } = require("./models/db");
 
 const app = express();
 const server = require("http").createServer(app);
-const ws = new WebSocket(
-  `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${
-    window.location.host
-  }`
-);
+const wss = new WebSocket.Server({ noServer: true });
 
 // Erstelle den sessionParser einmal global
 const sessionParser = session({

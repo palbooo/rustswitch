@@ -72,8 +72,8 @@ app.use(passport.session());
 passport.use(
   new SteamStrategy(
     {
-      returnURL: "http://localhost:3000/auth/steam/return",
-      realm: "http://localhost:3000/",
+      returnURL: `${process.env.APP_URL}/auth/steam/return`,
+      realm: `${process.env.APP_URL}/`,
       apiKey: process.env.STEAM_API_KEY,
     },
     function (identifier, profile, done) {
@@ -425,6 +425,24 @@ app.get(
     }
   }
 );
+
+// Add this route before other routes
+app.get("/", (req, res) => {
+  if (req.isAuthenticated()) {
+    // If user is already logged in, redirect based on role
+    const steamId = req.user.id;
+    if (adminIds.has(steamId)) {
+      res.redirect("/admin");
+    } else if (editIds.has(steamId)) {
+      res.redirect("/edit");
+    } else {
+      res.redirect("/playground");
+    }
+  } else {
+    // If not logged in, show the login page
+    res.sendFile(path.join(__dirname, "public", "index.html"));
+  }
+});
 
 app.get("/admin", isAuthenticated, (req, res) => {
   if (!adminIds.has(req.user.id)) {

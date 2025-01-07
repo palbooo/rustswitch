@@ -1,0 +1,29 @@
+.rust-auth-notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 10000;
+    transition: opacity 0.3s ease-in-out;
+  }
+  
+  .rust-auth-notification.hidden {
+    opacity: 0;
+    pointer-events: none;
+  }
+  
+  .notification-content {
+    background-color: #4CAF50;
+    color: white;
+    padding: 16px 24px;
+    border-radius: 4px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    font-family: Arial, sans-serif;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  
+  .notification-content span {
+    margin-left: 8px;
+  }

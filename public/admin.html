@@ -1,0 +1,914 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Admin Panel</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+
+      .grid-container {
+        display: grid;
+        grid-template-columns: repeat(15, 60px);
+        grid-template-rows: repeat(5, 60px);
+        gap: 5px;
+        margin: 20px 0;
+        background-color: #f0f0f0;
+        padding: 10px;
+        border-radius: 4px;
+      }
+
+      .grid-cell {
+        background-color: #fff;
+        border: 1px solid #ddd;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        position: relative;
+      }
+
+      .grid-cell:hover {
+        background-color: #f5f5f5;
+      }
+
+      .grid-cell.occupied {
+        background-color: #4caf50;
+        color: white;
+      }
+
+      .grid-cell.selected {
+        border: 2px solid #2196f3;
+      }
+
+      .switch-container {
+        position: relative;
+        width: 100%;
+        height: 100%;
+      }
+
+      .switch-button {
+        width: 100%;
+        height: 100%;
+        border: none;
+        background-color: #4caf50;
+        color: white;
+        cursor: pointer;
+        font-size: 12px;
+        padding: 4px;
+        text-align: center;
+        word-break: break-word;
+      }
+
+      .switch-button:hover {
+        background-color: #45a049;
+      }
+
+      .switch-button.off {
+        background-color: #f44336;
+      }
+
+      .remove-switch {
+        position: absolute;
+        top: -8px;
+        right: -8px;
+        width: 16px;
+        height: 16px;
+        background-color: #f44336;
+        color: white;
+        border: none;
+        border-radius: 50%;
+        font-size: 10px;
+        line-height: 1;
+        cursor: pointer;
+        display: none;
+        z-index: 2;
+      }
+
+      .grid-cell:hover .remove-switch {
+        display: block;
+      }
+
+      .remove-switch:hover {
+        background-color: #d32f2f;
+      }
+
+      .status {
+        margin: 10px 0;
+        padding: 10px;
+        border-radius: 4px;
+      }
+
+      .success {
+        background-color: #e8f5e9;
+        color: #4caf50;
+        border-left: 4px solid #4caf50;
+      }
+
+      .error {
+        background-color: #ffebee;
+        color: #f44336;
+        border-left: 4px solid #f44336;
+      }
+
+      .notification {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 15px;
+        background-color: #2196f3;
+        color: white;
+        border-radius: 4px;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+        display: none;
+        z-index: 1000;
+      }
+
+      .edit-ids-container {
+        margin-top: 20px;
+      }
+
+      .edit-id-item {
+        display: flex;
+        align-items: center;
+        margin: 5px 0;
+        padding: 5px;
+        background-color: #f5f5f5;
+        border-radius: 4px;
+      }
+
+      .edit-id-item span {
+        flex-grow: 1;
+        margin-right: 10px;
+      }
+
+      .remove-btn {
+        background-color: #ff4444;
+        color: white;
+        border: none;
+        padding: 5px 10px;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+
+      .remove-btn:hover {
+        background-color: #cc0000;
+      }
+
+      button {
+        background-color: #4caf50;
+        color: white;
+        border: none;
+        padding: 10px 15px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+      }
+
+      button:hover {
+        background-color: #45a049;
+      }
+
+      .panel-section {
+        margin-bottom: 30px;
+        padding: 20px;
+        background-color: #fff;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+
+      h2 {
+        margin-top: 0;
+        color: #333;
+      }
+
+      .logs-container {
+        margin-top: 20px;
+        max-height: 400px;
+        overflow-y: auto;
+      }
+
+      .log-entry {
+        padding: 10px;
+        border-bottom: 1px solid #eee;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        line-height: 24px;
+      }
+
+      .log-entry:hover {
+        background-color: #f5f5f5;
+      }
+
+      .log-time {
+        color: #666;
+        font-size: 0.9em;
+      }
+
+      .log-action {
+        display: flex;
+        align-items: center;
+        flex-grow: 1;
+        margin: 0 15px;
+      }
+
+      .log-state {
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 0.9em;
+      }
+
+      .log-state.on {
+        background-color: #4caf50;
+        color: white;
+      }
+
+      .log-state.off {
+        background-color: #f44336;
+        color: white;
+      }
+
+      .refresh-btn {
+        margin-bottom: 10px;
+      }
+
+      /* Playground Controls Styles */
+      .playground-controls {
+        padding: 20px;
+        background-color: #f5f5f5;
+        border-radius: 8px;
+        margin-top: 20px;
+      }
+
+      .control-group {
+        margin-bottom: 20px;
+      }
+
+      .switch-label {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .switch {
+        position: relative;
+        display: inline-block;
+        width: 60px;
+        height: 34px;
+      }
+
+      .switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+      }
+
+      .slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: #ccc;
+        transition: 0.4s;
+        border-radius: 34px;
+      }
+
+      .slider:before {
+        position: absolute;
+        content: "";
+        height: 26px;
+        width: 26px;
+        left: 4px;
+        bottom: 4px;
+        background-color: white;
+        transition: 0.4s;
+        border-radius: 50%;
+      }
+
+      input:checked + .slider {
+        background-color: #4caf50;
+      }
+
+      input:checked + .slider:before {
+        transform: translateX(26px);
+      }
+
+      .cooldown-control {
+        display: flex;
+        gap: 10px;
+        margin-top: 5px;
+      }
+
+      .number-input {
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        width: 100px;
+      }
+
+      .text-input {
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        width: 200px;
+        margin-right: 10px;
+      }
+
+      .action-button {
+        padding: 8px 16px;
+        background-color: #2196f3;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+
+      .action-button:hover {
+        background-color: #1976d2;
+      }
+
+      .banned-users {
+        margin-top: 10px;
+      }
+
+      .banned-user {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px;
+        background-color: #fff;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        margin-bottom: 5px;
+      }
+
+      .unban-button {
+        padding: 4px 8px;
+        background-color: #f44336;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+
+      .unban-button:hover {
+        background-color: #d32f2f;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Admin Panel</h1>
+
+    <div id="status" class="status"></div>
+    <div id="notification" class="notification"></div>
+
+    <div class="panel-section">
+      <h2>Switch Grid</h2>
+      <div class="grid-container" id="switchGrid"></div>
+    </div>
+
+    <div class="panel-section">
+      <h2>Switch Logs</h2>
+      <button class="refresh-btn" onclick="loadSwitchLogs()">
+        Logs aktualisieren
+      </button>
+      <div class="logs-container" id="logsContainer">
+        <!-- Logs werden hier dynamisch eingefügt -->
+      </div>
+    </div>
+
+    <div class="panel-section">
+      <h2>Edit-IDs verwalten</h2>
+      <div>
+        <input type="text" id="steamId" placeholder="Steam ID" />
+        <button onclick="addEditId()">Hinzufügen</button>
+      </div>
+      <div class="edit-ids-container" id="editIdsList">
+        <!-- Edit IDs werden hier dynamisch eingefügt -->
+      </div>
+    </div>
+
+    <div class="panel-section">
+      <h2>Playground Controls</h2>
+      <div class="playground-controls">
+        <div class="control-group">
+          <label class="switch-label">
+            Enable Playground
+            <div class="switch">
+              <input type="checkbox" id="playgroundToggle" />
+              <span class="slider"></span>
+            </div>
+          </label>
+        </div>
+
+        <div class="control-group">
+          <label>
+            Cooldown (seconds)
+            <div class="cooldown-control">
+              <input
+                type="number"
+                id="cooldownInput"
+                min="0"
+                value="30"
+                class="number-input"
+              />
+              <button onclick="updateCooldown()" class="action-button">
+                Update
+              </button>
+            </div>
+          </label>
+        </div>
+
+        <div class="control-group">
+          <h3>Ban Management</h3>
+          <div class="ban-controls">
+            <input
+              type="text"
+              id="banInput"
+              placeholder="Enter Steam ID"
+              class="text-input"
+            />
+            <button onclick="banUser()" class="action-button">Ban User</button>
+          </div>
+          <div id="bannedUsersList" class="banned-users"></div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const ws = new WebSocket(`ws://${window.location.host}`);
+      const grid = document.getElementById("switchGrid");
+      const notification = document.getElementById("notification");
+      let selectedCell = null;
+      let switches = new Map();
+
+      // Initialize grid
+      function initializeGrid() {
+        for (let row = 0; row < 5; row++) {
+          for (let col = 0; col < 15; col++) {
+            const cell = document.createElement("div");
+            cell.className = "grid-cell";
+            cell.dataset.position = `${row}-${col}`;
+            cell.addEventListener("click", () => selectCell(cell));
+            grid.appendChild(cell);
+          }
+        }
+      }
+
+      function selectCell(cell) {
+        if (cell.classList.contains("occupied")) return;
+
+        if (selectedCell) {
+          selectedCell.classList.remove("selected");
+        }
+        cell.classList.add("selected");
+        selectedCell = cell;
+      }
+
+      function showNotification(message) {
+        notification.textContent = message;
+        notification.style.display = "block";
+        setTimeout(() => {
+          notification.style.display = "none";
+        }, 5000);
+      }
+
+      function addSwitch(switchData, position) {
+        const cell = document.querySelector(`[data-position="${position}"]`);
+        if (!cell) return;
+
+        const container = document.createElement("div");
+        container.className = "switch-container";
+
+        const button = document.createElement("button");
+        button.className = "switch-button";
+        button.textContent = switchData.name;
+        button.dataset.switchId = switchData.switchId;
+        button.classList.toggle("off", !switchData.lastState);
+        button.addEventListener("click", () =>
+          toggleSwitch(switchData.switchId)
+        );
+
+        const removeButton = document.createElement("button");
+        removeButton.className = "remove-switch";
+        removeButton.innerHTML = "×";
+        removeButton.addEventListener("click", (e) => {
+          e.stopPropagation();
+          if (
+            confirm(
+              `Möchten Sie den Switch "${switchData.name}" wirklich entfernen?`
+            )
+          ) {
+            removeSwitch(switchData.switchId);
+          }
+        });
+
+        container.appendChild(button);
+        container.appendChild(removeButton);
+
+        cell.innerHTML = "";
+        cell.appendChild(container);
+        cell.classList.add("occupied");
+        switches.set(switchData.switchId, { ...switchData, position });
+      }
+
+      function loadExistingSwitches(switchesData) {
+        switchesData.forEach((switchData) => {
+          const position = `${switchData.position.row}-${switchData.position.col}`;
+          addSwitch(switchData, position);
+        });
+      }
+
+      function toggleSwitch(switchId) {
+        const switchData = switches.get(switchId);
+        if (!switchData) return;
+
+        ws.send(
+          JSON.stringify({
+            type: "toggleSwitch",
+            switchId: switchId,
+            state: !switchData.lastState,
+          })
+        );
+      }
+
+      function removeSwitch(switchId) {
+        ws.send(
+          JSON.stringify({
+            type: "removeSwitch",
+            switchIdToRemove: switchId,
+          })
+        );
+      }
+
+      async function loadSwitchLogs() {
+        try {
+          const response = await fetch("/api/switch-logs");
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          const logs = await response.json();
+
+          const container = document.getElementById("logsContainer");
+          container.innerHTML = "";
+
+          if (logs.length === 0) {
+            container.innerHTML =
+              '<p style="color: #666; padding: 10px;">Keine Logs vorhanden</p>';
+            return;
+          }
+
+          logs.forEach((log) => {
+            const switchData = switches.get(log.switchId);
+            const switchName = switchData ? switchData.name : log.switchId;
+
+            const logEntry = document.createElement("div");
+            logEntry.className = "log-entry";
+
+            const time = new Date(log.timestamp).toLocaleString();
+
+            logEntry.innerHTML = `
+  <span class="log-time">${time}</span>
+  <span class="log-action">
+    <img src="${log.avatarUrl}" alt="${
+              log.steamName
+            }" style="width: 24px; height: 24px; border-radius: 50%; vertical-align: middle; margin-right: 8px;">
+    ${switchName} wurde von ${log.steamName} (${log.steamId})
+  </span>
+  <span class="log-state ${log.state ? "on" : "off"}">${
+              log.state ? "AN" : "AUS"
+            }</span>
+`;
+
+            container.appendChild(logEntry);
+          });
+        } catch (error) {
+          console.error("Fehler beim Laden der Switch-Logs:", error);
+          const container = document.getElementById("logsContainer");
+          container.innerHTML =
+            '<p class="error">Fehler beim Laden der Logs</p>';
+        }
+      }
+
+      async function addEditId() {
+        const steamId = document.getElementById("steamId").value;
+        if (!steamId) {
+          alert("Bitte eine Steam ID eingeben");
+          return;
+        }
+
+        try {
+          const response = await fetch("/api/edit-ids", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ steamId, action: "add" }),
+          });
+
+          if (response.ok) {
+            document.getElementById("steamId").value = "";
+            loadEditIds();
+          } else {
+            const error = await response.json();
+            alert(`Fehler: ${error.error || "Unbekannter Fehler"}`);
+          }
+        } catch (error) {
+          console.error("Fehler beim Hinzufügen der Edit-ID:", error);
+          alert("Fehler beim Hinzufügen der Edit-ID");
+        }
+      }
+
+      async function removeEditId(steamId) {
+        try {
+          const response = await fetch("/api/edit-ids", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ steamId, action: "remove" }),
+          });
+
+          if (response.ok) {
+            loadEditIds();
+          } else {
+            const error = await response.json();
+            alert(`Fehler: ${error.error || "Unbekannter Fehler"}`);
+          }
+        } catch (error) {
+          console.error("Fehler beim Entfernen der Edit-ID:", error);
+          alert("Fehler beim Entfernen der Edit-ID");
+        }
+      }
+
+      async function loadEditIds() {
+        try {
+          const response = await fetch("/api/edit-ids");
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          const editIds = await response.json();
+
+          const container = document.getElementById("editIdsList");
+          container.innerHTML = "";
+
+          if (editIds.length === 0) {
+            container.innerHTML =
+              '<p style="color: #666;">Keine Edit-IDs vorhanden</p>';
+            return;
+          }
+
+          editIds.forEach((id) => {
+            const item = document.createElement("div");
+            item.className = "edit-id-item";
+
+            const span = document.createElement("span");
+            span.textContent = id;
+
+            const button = document.createElement("button");
+            button.className = "remove-btn";
+            button.textContent = "Entfernen";
+            button.onclick = () => removeEditId(id);
+
+            item.appendChild(span);
+            item.appendChild(button);
+            container.appendChild(item);
+          });
+        } catch (error) {
+          console.error("Fehler beim Laden der Edit-IDs:", error);
+          const container = document.getElementById("editIdsList");
+          container.innerHTML =
+            '<p class="error">Fehler beim Laden der Edit-IDs</p>';
+        }
+      }
+
+      // Load playground settings
+      async function loadPlaygroundSettings() {
+        try {
+          const response = await fetch("/api/playground-settings");
+          if (!response.ok) throw new Error("Failed to load settings");
+          const settings = await response.json();
+
+          // Update UI with settings
+          document.getElementById("playgroundToggle").checked =
+            settings.enabled;
+          document.getElementById("cooldownInput").value = settings.cooldown;
+
+          // Update banned users list
+          updateBannedUsersList(settings.bannedUsers);
+        } catch (error) {
+          console.error("Error loading playground settings:", error);
+          showNotification("Error loading playground settings");
+        }
+      }
+
+      // Update playground enabled state
+      async function togglePlayground() {
+        const enabled = document.getElementById("playgroundToggle").checked;
+        try {
+          const response = await fetch("/api/playground-settings", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ enabled }),
+          });
+
+          if (!response.ok)
+            throw new Error("Failed to update playground state");
+          showNotification(`Playground ${enabled ? "enabled" : "disabled"}`);
+        } catch (error) {
+          console.error("Error updating playground state:", error);
+          showNotification("Error updating playground state");
+        }
+      }
+
+      // Update cooldown time
+      async function updateCooldown() {
+        const cooldown = parseInt(
+          document.getElementById("cooldownInput").value
+        );
+        if (isNaN(cooldown) || cooldown < 0) {
+          showNotification("Please enter a valid cooldown time");
+          return;
+        }
+
+        try {
+          const response = await fetch("/api/playground-settings", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ cooldown }),
+          });
+
+          if (!response.ok) throw new Error("Failed to update cooldown");
+          showNotification(`Cooldown updated to ${cooldown} seconds`);
+        } catch (error) {
+          console.error("Error updating cooldown:", error);
+          showNotification("Error updating cooldown");
+        }
+      }
+
+      // Ban a user
+      async function banUser() {
+        const steamId = document.getElementById("banInput").value.trim();
+        if (!steamId) {
+          showNotification("Please enter a Steam ID");
+          return;
+        }
+
+        try {
+          const response = await fetch("/api/banned-users", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ steamId, action: "ban" }),
+          });
+
+          if (!response.ok) throw new Error("Failed to ban user");
+          document.getElementById("banInput").value = "";
+          showNotification(`User ${steamId} banned`);
+          await loadPlaygroundSettings(); // Reload settings to update banned users list
+        } catch (error) {
+          console.error("Error banning user:", error);
+          showNotification("Error banning user");
+        }
+      }
+
+      // Unban a user
+      async function unbanUser(steamId) {
+        try {
+          const response = await fetch("/api/banned-users", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ steamId, action: "unban" }),
+          });
+
+          if (!response.ok) throw new Error("Failed to unban user");
+          showNotification(`User ${steamId} unbanned`);
+          await loadPlaygroundSettings(); // Reload settings to update banned users list
+        } catch (error) {
+          console.error("Error unbanning user:", error);
+          showNotification("Error unbanning user");
+        }
+      }
+
+      // Update banned users list in UI
+      function updateBannedUsersList(bannedUsers) {
+        const container = document.getElementById("bannedUsersList");
+        container.innerHTML = "";
+
+        if (bannedUsers.length === 0) {
+          container.innerHTML = "<p>No banned users</p>";
+          return;
+        }
+
+        bannedUsers.forEach((steamId) => {
+          const userElement = document.createElement("div");
+          userElement.className = "banned-user";
+          userElement.innerHTML = `
+            <span>${steamId}</span>
+            <button class="unban-button" onclick="unbanUser('${steamId}')">Unban</button>
+          `;
+          container.appendChild(userElement);
+        });
+      }
+
+      // WebSocket handlers
+      ws.onopen = () => {
+        document.getElementById("status").innerHTML =
+          '<p class="success">Verbunden mit Server</p>';
+        // Request existing switches
+        ws.send(JSON.stringify({ type: "loadSwitches" }));
+        // Load edit IDs
+        loadEditIds();
+        // Load playground settings
+        loadPlaygroundSettings();
+      };
+
+      ws.onclose = () => {
+        document.getElementById("status").innerHTML =
+          '<p class="error">Verbindung zum Server getrennt</p>';
+      };
+
+      ws.onerror = () => {
+        document.getElementById("status").innerHTML =
+          '<p class="error">WebSocket Fehler aufgetreten</p>';
+      };
+
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+
+        switch (data.type) {
+          case "switchesLoaded":
+            loadExistingSwitches(data.switches);
+            break;
+
+          case "addSwitch":
+            if (selectedCell) {
+              const position = selectedCell.dataset.position;
+              ws.send(
+                JSON.stringify({
+                  type: "confirmSwitch",
+                  switchData: data.switch,
+                  position: position,
+                })
+              );
+            } else {
+              showNotification(
+                "Bitte wählen Sie zuerst eine Position im Grid aus"
+              );
+            }
+            break;
+
+          case "addedSwitch":
+            const position = `${data.switch.position.row}-${data.switch.position.col}`;
+            addSwitch(data.switch, position);
+            selectedCell.classList.remove("selected");
+            selectedCell = null;
+            showNotification(`Switch "${data.switch.name}" wurde hinzugefügt`);
+            break;
+
+          case "switchStateChanged":
+            const button = document.querySelector(
+              `[data-switch-id="${data.switchId}"]`
+            );
+            if (button) {
+              button.classList.toggle("off", !data.state);
+              const switchData = switches.get(data.switchId);
+              if (switchData) {
+                switchData.lastState = data.state;
+              }
+            }
+            break;
+
+          case "switchRemoved":
+            const removedCell = document
+              .querySelector(`button[data-switch-id="${data.switchId}"]`)
+              .closest(".grid-cell");
+            if (removedCell) {
+              removedCell.innerHTML = "";
+              removedCell.classList.remove("occupied");
+              switches.delete(data.switchId);
+              showNotification("Switch wurde erfolgreich entfernt");
+            }
+            break;
+
+          case "error":
+            showNotification(data.message);
+            break;
+        }
+      };
+
+      // Initialize the grid when the page loads
+      initializeGrid();
+
+      // Add event listener for playground toggle
+      document
+        .getElementById("playgroundToggle")
+        .addEventListener("change", togglePlayground);
+    </script>
+  </body>
+</html>

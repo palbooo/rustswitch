@@ -1,0 +1,31 @@
+# Abhängigkeiten
+/node_modules
+/.pnp
+.pnp.js
+
+# Production Build
+/build
+/dist
+
+# Verschiedene Cache-Dateien
+.cache/
+.npm
+
+# Umgebungsvariablen
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDE spezifische Dateien
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store

@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "Rust+ Auth Viewer",
+  "version": "1.0",
+  "description": "Copy your Rust+ authentication data",
+  "permissions": ["activeTab", "clipboardWrite"],
+  "action": {},
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://companion-rust.facepunch.com/*"],
+      "js": ["content.js"]
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["catcher.js"],
+      "matches": ["https://companion-rust.facepunch.com/*"]
+    }
+  ]
+}

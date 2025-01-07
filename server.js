@@ -573,6 +573,18 @@ wss.on("connection", function connection(ws, req) {
     return;
   }
 
+  // Set up ping interval
+  const pingInterval = setInterval(() => {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.ping();
+    }
+  }, 15000); // Send ping every 15 seconds
+
+  // Clear interval on close
+  ws.on("close", () => {
+    clearInterval(pingInterval);
+  });
+
   let userRole = "playground";
   if (adminIds.has(userSteamId)) {
     userRole = "admin";

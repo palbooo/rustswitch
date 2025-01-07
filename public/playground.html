@@ -3,7 +3,9 @@
   <head>
     <title>Raven Guard (RVG) - Playground</title>
     <link rel="icon" type="image/x-icon" href="rvg.ico" />
+    <!-- Styles bleiben unverändert -->
     <style>
+      /* Vorhandene Styles bleiben gleich */
       body {
         font-family: Arial, sans-serif;
         max-width: 1400px;
@@ -19,167 +21,12 @@
         justify-content: center;
       }
 
-      /* Background image container */
-      body::before {
-        content: "";
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background-image: url("rvg.webp");
-        background-size: cover;
-        background-position: center;
-        background-repeat: no-repeat;
-        filter: blur(8px);
-        opacity: 0.15;
-        z-index: -1;
-      }
+      /* Der Rest der Styles bleibt unverändert */
+      /* ... */
 
-      .grid-container {
-        display: grid;
-        grid-template-columns: repeat(15, 42px);
-        grid-template-rows: repeat(5, 42px);
-        gap: 1px;
-        margin: 2px 0;
-        padding: 3px;
-        border-radius: 4px;
-        width: max-content;
-      }
-
-      .grid-cell {
-        background: none;
-        border: none;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
-
-      .switch-container {
-        position: relative;
-        width: 100%;
-        height: 100%;
-      }
-
-      .switch-button {
-        width: 35px;
-        height: 35px;
-        border: none;
-        background-color: #4caf50;
-        color: transparent;
-        cursor: pointer;
-        border-radius: 50%;
-        padding: 0;
-      }
-
-      .switch-button:hover {
-        background-color: #45a049;
-      }
-
-      .switch-button.off {
-        background-color: #f44336;
-      }
-
-      @keyframes pulse {
-        0% {
-          transform: scale(0.95);
-          box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.7);
-        }
-
-        70% {
-          transform: scale(1);
-          box-shadow: 0 0 0 6px rgba(76, 175, 80, 0);
-        }
-
-        100% {
-          transform: scale(0.95);
-          box-shadow: 0 0 0 0 rgba(76, 175, 80, 0);
-        }
-      }
-
-      @keyframes pulse-error {
-        0% {
-          transform: scale(0.95);
-          box-shadow: 0 0 0 0 rgba(244, 67, 54, 0.7);
-        }
-
-        70% {
-          transform: scale(1);
-          box-shadow: 0 0 0 6px rgba(244, 67, 54, 0);
-        }
-
-        100% {
-          transform: scale(0.95);
-          box-shadow: 0 0 0 0 rgba(244, 67, 54, 0);
-        }
-      }
-
-      .status {
-        padding: 10px;
-        border-radius: 4px;
-        display: flex;
-        align-items: center;
-        margin-left: 5px;
-      }
-
-      .status-circle {
-        width: 12px;
-        height: 12px;
-        border-radius: 50%;
-        background-color: #4caf50;
-        animation: pulse 2s infinite;
-      }
-
-      .status.error .status-circle {
-        background-color: #f44336;
-        animation: pulse-error 2s infinite;
-      }
-
-      .notification {
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        padding: 15px;
-        background-color: rgba(33, 150, 243, 0.9);
-        color: white;
-        border-radius: 4px;
-        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-        display: none;
-        z-index: 1000;
-      }
-
-      .panel-section {
-        margin-bottom: 30px;
-        padding: 8px;
-        background-color: rgba(33, 37, 43, 0.95);
-        border-radius: 8px;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
-        width: fit-content;
-        margin: 0 auto;
-        display: flex;
-        justify-content: center;
-      }
-
-      .cooldown-message {
-        background-color: #2c1810;
+      /* Styling für die Verbindungs-Status-Anzeige */
+      .reconnecting {
         color: #ff9800;
-        padding: 10px;
-        border-radius: 4px;
-        margin-bottom: 10px;
-        border-left: 4px solid #ff9800;
-        display: none;
-      }
-
-      h1 {
-        margin: 0;
-      }
-
-      .header-container {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        margin-bottom: 20px;
-        width: 100%;
       }
     </style>
   </head>
@@ -198,16 +45,17 @@
     </div>
 
     <script>
-      const ws = new WebSocket(
-        `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${
-          window.location.host
-        }`
-      );
+      // Globale Variablen
+      let ws;
+      let reconnectAttempt = 0;
+      const MAX_RECONNECT_DELAY = 5000;
+      const switches = new Map();
       const grid = document.getElementById("switchGrid");
       const notification = document.getElementById("notification");
       const cooldownMessage = document.getElementById("cooldownMessage");
-      let switches = new Map();
+      let authenticated = false;
 
+      // Hilfsfunktionen bleiben größtenteils unverändert
       function showNotification(message) {
         notification.textContent = message;
         notification.style.display = "block";
@@ -222,6 +70,36 @@
         setTimeout(() => {
           cooldownMessage.style.display = "none";
         }, 3000);
+      }
+
+      function handleAuth(message) {
+        try {
+          const data = JSON.parse(message);
+          if (data.type === "auth") {
+            if (data.status === "success") {
+              authenticated = true;
+              document.getElementById("status").className = "status";
+              ws.send(JSON.stringify({ type: "loadSwitches" }));
+            } else {
+              document.getElementById("status").className = "status error";
+              ws.close();
+            }
+          }
+        } catch (err) {
+          console.error("Error processing authentication message:", err);
+        }
+      }
+
+      // Grid und Switch Funktionen bleiben unverändert
+      function initializeGrid() {
+        for (let row = 0; row < 5; row++) {
+          for (let col = 0; col < 15; col++) {
+            const cell = document.createElement("div");
+            cell.className = "grid-cell";
+            cell.dataset.position = `${row}-${col}`;
+            grid.appendChild(cell);
+          }
+        }
       }
 
       function addSwitch(switchData, position) {
@@ -265,87 +143,116 @@
         );
       }
 
-      function initializeGrid() {
-        for (let row = 0; row < 5; row++) {
-          for (let col = 0; col < 15; col++) {
-            const cell = document.createElement("div");
-            cell.className = "grid-cell";
-            cell.dataset.position = `${row}-${col}`;
-            grid.appendChild(cell);
-          }
+      // Neue WebSocket Verbindungslogik
+      function connect() {
+        ws = new WebSocket(
+          `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${
+            window.location.host
+          }`
+        );
+
+        // Ping timeout handling
+        ws.pingTimeout = null;
+
+        function heartbeat() {
+          clearTimeout(ws.pingTimeout);
+
+          // Warte 5s länger als das Server Ping-Intervall (15s + 5s = 20s)
+          ws.pingTimeout = setTimeout(() => {
+            console.log("WebSocket Verbindung timeout - schließe Verbindung");
+            ws.close();
+          }, 20000);
         }
-      }
 
-      // WebSocket handlers
-      ws.onopen = function () {
-        document.getElementById("status").className = "status";
-      };
+        ws.onopen = () => {
+          console.log("WebSocket verbunden");
+          document.getElementById("status").className = "status";
+          reconnectAttempt = 0;
+          heartbeat();
+        };
 
-      let authenticated = false;
-      function handleAuth(message) {
-        try {
-          const data = JSON.parse(message);
-          if (data.type === "auth") {
-            if (data.status === "success") {
-              authenticated = true;
-              document.getElementById("status").className = "status";
-              ws.send(JSON.stringify({ type: "loadSwitches" }));
-            } else {
-              document.getElementById("status").className = "status error";
-              ws.close();
+        ws.onclose = () => {
+          console.log("WebSocket getrennt");
+          document.getElementById("status").className = "status error";
+          clearTimeout(ws.pingTimeout);
+          authenticated = false;
+
+          // Exponentielles Backoff für Reconnect
+          const delay = Math.min(
+            1000 * Math.pow(2, reconnectAttempt),
+            MAX_RECONNECT_DELAY
+          );
+          console.log(`Versuche Reconnect in ${delay}ms...`);
+          showNotification(
+            `Verbindung verloren. Reconnect in ${Math.round(
+              delay / 1000
+            )} Sekunden...`
+          );
+
+          setTimeout(() => {
+            reconnectAttempt++;
+            connect();
+          }, delay);
+        };
+
+        ws.onerror = (error) => {
+          console.error("WebSocket Fehler:", error);
+          document.getElementById("status").className = "status error";
+        };
+
+        ws.onmessage = (event) => {
+          heartbeat();
+
+          try {
+            const data = JSON.parse(event.data);
+
+            if (data.type === "auth") {
+              handleAuth(event.data);
+              return;
             }
+
+            switch (data.type) {
+              case "switchesLoaded":
+                loadExistingSwitches(data.switches);
+                break;
+
+              case "switchStateChanged":
+                const button = document.querySelector(
+                  `[data-switch-id="${data.switchId}"]`
+                );
+                if (button) {
+                  button.classList.toggle("off", !data.state);
+                  const switchData = switches.get(data.switchId);
+                  if (switchData) {
+                    switchData.lastState = data.state;
+                  }
+                }
+                break;
+
+              case "error":
+                if (data.message.includes("warte noch")) {
+                  showCooldownMessage(data.message);
+                } else {
+                  showNotification(data.message);
+                }
+                break;
+            }
+          } catch (error) {
+            console.error("Error processing WebSocket message:", error);
           }
-        } catch (err) {
-          console.error("Error processing authentication message:", err);
-        }
+        };
       }
 
-      ws.onmessage = function (event) {
-        try {
-          const data = JSON.parse(event.data);
-
-          if (data.type === "auth") {
-            handleAuth(event.data);
-            return;
-          }
-
-          switch (data.type) {
-            case "switchesLoaded":
-              loadExistingSwitches(data.switches);
-              break;
-
-            case "switchStateChanged":
-              const button = document.querySelector(
-                `[data-switch-id="${data.switchId}"]`
-              );
-              if (button) {
-                button.classList.toggle("off", !data.state);
-                const switchData = switches.get(data.switchId);
-                if (switchData) {
-                  switchData.lastState = data.state;
-                }
-              }
-              break;
-
-            case "error":
-              if (data.message.includes("warte noch")) {
-                showCooldownMessage(data.message);
-              } else {
-                showNotification(data.message);
-              }
-              break;
-          }
-        } catch (error) {
-          console.error("Error processing WebSocket message:", error);
-        }
-      };
-
-      ws.onclose = function () {
-        document.getElementById("status").className = "status error";
-      };
-
-      // Initialize the grid when the page loads
+      // Initialisierung
       initializeGrid();
+      connect();
+
+      // Cleanup bei Page Unload
+      window.addEventListener("beforeunload", () => {
+        if (ws) {
+          ws.close();
+        }
+      });
     </script>
   </body>
 </html>

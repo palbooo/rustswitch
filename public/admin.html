@@ -442,17 +442,25 @@
     </div>
 
     <script>
-      const ws = new WebSocket(
-        `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${
-          window.location.host
-        }`
-      );
+      // Globale Variablen
+      let ws;
+      let reconnectAttempt = 0;
+      const MAX_RECONNECT_DELAY = 5000;
+      let selectedCell = null;
+      const switches = new Map();
       const grid = document.getElementById("switchGrid");
       const notification = document.getElementById("notification");
-      let selectedCell = null;
-      let switches = new Map();
 
-      // Initialize grid
+      // Hilfsfunktionen
+      function showNotification(message) {
+        notification.textContent = message;
+        notification.style.display = "block";
+        setTimeout(() => {
+          notification.style.display = "none";
+        }, 5000);
+      }
+
+      // Grid Initialisierung
       function initializeGrid() {
         for (let row = 0; row < 5; row++) {
           for (let col = 0; col < 15; col++) {
@@ -475,14 +483,7 @@
         selectedCell = cell;
       }
 
-      function showNotification(message) {
-        notification.textContent = message;
-        notification.style.display = "block";
-        setTimeout(() => {
-          notification.style.display = "none";
-        }, 5000);
-      }
-
+      // Switch Management
       function addSwitch(switchData, position) {
         const cell = document.querySelector(`[data-position="${position}"]`);
         if (!cell) return;
@@ -515,7 +516,6 @@
 
         container.appendChild(button);
         container.appendChild(removeButton);
-
         cell.innerHTML = "";
         cell.appendChild(container);
         cell.classList.add("occupied");
@@ -551,12 +551,155 @@
         );
       }
 
+      // WebSocket Verbindung
+      function connect() {
+        ws = new WebSocket(
+          `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${
+            window.location.host
+          }`
+        );
+
+        // Ping timeout handling
+        ws.pingTimeout = null;
+
+        function heartbeat() {
+          clearTimeout(ws.pingTimeout);
+
+          // Warte 5s länger als das Server Ping-Intervall (15s + 5s = 20s)
+          ws.pingTimeout = setTimeout(() => {
+            console.log("WebSocket Verbindung timeout - schließe Verbindung");
+            ws.close();
+          }, 20000);
+        }
+
+        ws.onopen = () => {
+          console.log("WebSocket verbunden");
+          document.getElementById("status").innerHTML =
+            '<p class="success">Verbunden mit Server</p>';
+
+          // Initiale Daten laden
+          ws.send(JSON.stringify({ type: "loadSwitches" }));
+          loadEditIds();
+          loadPlaygroundSettings();
+          loadSwitchLogs();
+
+          reconnectAttempt = 0;
+          heartbeat();
+        };
+
+        ws.onclose = () => {
+          console.log("WebSocket getrennt");
+          document.getElementById("status").innerHTML =
+            '<p class="error">Verbindung zum Server getrennt</p>';
+          clearTimeout(ws.pingTimeout);
+
+          // Exponentielles Backoff für Reconnect
+          const delay = Math.min(
+            1000 * Math.pow(2, reconnectAttempt),
+            MAX_RECONNECT_DELAY
+          );
+          console.log(`Versuche Reconnect in ${delay}ms...`);
+          showNotification(
+            `Verbindung verloren. Reconnect in ${Math.round(
+              delay / 1000
+            )} Sekunden...`
+          );
+
+          setTimeout(() => {
+            reconnectAttempt++;
+            connect();
+          }, delay);
+        };
+
+        ws.onerror = (error) => {
+          console.error("WebSocket Fehler:", error);
+          document.getElementById("status").innerHTML =
+            '<p class="error">WebSocket Fehler aufgetreten</p>';
+        };
+
+        ws.onmessage = (event) => {
+          heartbeat();
+
+          try {
+            const data = JSON.parse(event.data);
+
+            switch (data.type) {
+              case "switchesLoaded":
+                loadExistingSwitches(data.switches);
+                break;
+
+              case "addSwitch":
+                if (selectedCell) {
+                  const position = selectedCell.dataset.position;
+                  ws.send(
+                    JSON.stringify({
+                      type: "confirmSwitch",
+                      switchData: data.switch,
+                      position: position,
+                    })
+                  );
+                } else {
+                  showNotification(
+                    "Bitte wählen Sie zuerst eine Position im Grid aus"
+                  );
+                }
+                break;
+
+              case "addedSwitch":
+                const position = `${data.switch.position.row}-${data.switch.position.col}`;
+                addSwitch(data.switch, position);
+                if (selectedCell) {
+                  selectedCell.classList.remove("selected");
+                  selectedCell = null;
+                }
+                showNotification(
+                  `Switch "${data.switch.name}" wurde hinzugefügt`
+                );
+                break;
+
+              case "switchStateChanged":
+                const button = document.querySelector(
+                  `[data-switch-id="${data.switchId}"]`
+                );
+                if (button) {
+                  button.classList.toggle("off", !data.state);
+                  const switchData = switches.get(data.switchId);
+                  if (switchData) {
+                    switchData.lastState = data.state;
+                  }
+                }
+                loadSwitchLogs();
+                break;
+
+              case "switchRemoved":
+                const removedCell = document
+                  .querySelector(`button[data-switch-id="${data.switchId}"]`)
+                  ?.closest(".grid-cell");
+                if (removedCell) {
+                  removedCell.innerHTML = "";
+                  removedCell.classList.remove("occupied");
+                  switches.delete(data.switchId);
+                  showNotification("Switch wurde erfolgreich entfernt");
+                  loadSwitchLogs();
+                }
+                break;
+
+              case "error":
+                showNotification(data.message);
+                break;
+            }
+          } catch (error) {
+            console.error("Error processing WebSocket message:", error);
+          }
+        };
+      }
+
+      // API Funktionen
       async function loadSwitchLogs() {
         try {
           const response = await fetch("/api/switch-logs");
-          if (!response.ok) {
+          if (!response.ok)
             throw new Error(`HTTP error! status: ${response.status}`);
-          }
           const logs = await response.json();
 
           const container = document.getElementById("logsContainer");
@@ -574,21 +717,20 @@
 
             const logEntry = document.createElement("div");
             logEntry.className = "log-entry";
-
             const time = new Date(log.timestamp).toLocaleString();
 
             logEntry.innerHTML = `
-  <span class="log-time">${time}</span>
-  <span class="log-action">
-    <img src="${log.avatarUrl}" alt="${
+        <span class="log-time">${time}</span>
+        <span class="log-action">
+          <img src="${log.avatarUrl}" alt="${
               log.steamName
             }" style="width: 24px; height: 24px; border-radius: 50%; vertical-align: middle; margin-right: 8px;">
-    ${switchName} wurde von ${log.steamName} (${log.steamId})
-  </span>
-  <span class="log-state ${log.state ? "on" : "off"}">${
+          ${switchName} wurde von ${log.steamName} (${log.steamId})
+        </span>
+        <span class="log-state ${log.state ? "on" : "off"}">${
               log.state ? "AN" : "AUS"
             }</span>
-`;
+      `;
 
             container.appendChild(logEntry);
           });
@@ -600,111 +742,15 @@
         }
       }
 
-      async function addEditId() {
-        const steamId = document.getElementById("steamId").value;
-        if (!steamId) {
-          alert("Bitte eine Steam ID eingeben");
-          return;
-        }
-
-        try {
-          const response = await fetch("/api/edit-ids", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ steamId, action: "add" }),
-          });
-
-          if (response.ok) {
-            document.getElementById("steamId").value = "";
-            loadEditIds();
-          } else {
-            const error = await response.json();
-            alert(`Fehler: ${error.error || "Unbekannter Fehler"}`);
-          }
-        } catch (error) {
-          console.error("Fehler beim Hinzufügen der Edit-ID:", error);
-          alert("Fehler beim Hinzufügen der Edit-ID");
-        }
-      }
-
-      async function removeEditId(steamId) {
-        try {
-          const response = await fetch("/api/edit-ids", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ steamId, action: "remove" }),
-          });
-
-          if (response.ok) {
-            loadEditIds();
-          } else {
-            const error = await response.json();
-            alert(`Fehler: ${error.error || "Unbekannter Fehler"}`);
-          }
-        } catch (error) {
-          console.error("Fehler beim Entfernen der Edit-ID:", error);
-          alert("Fehler beim Entfernen der Edit-ID");
-        }
-      }
-
-      async function loadEditIds() {
-        try {
-          const response = await fetch("/api/edit-ids");
-          if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-          }
-          const editIds = await response.json();
-
-          const container = document.getElementById("editIdsList");
-          container.innerHTML = "";
-
-          if (editIds.length === 0) {
-            container.innerHTML =
-              '<p style="color: #666;">Keine Edit-IDs vorhanden</p>';
-            return;
-          }
-
-          editIds.forEach((id) => {
-            const item = document.createElement("div");
-            item.className = "edit-id-item";
-
-            const span = document.createElement("span");
-            span.textContent = id;
-
-            const button = document.createElement("button");
-            button.className = "remove-btn";
-            button.textContent = "Entfernen";
-            button.onclick = () => removeEditId(id);
-
-            item.appendChild(span);
-            item.appendChild(button);
-            container.appendChild(item);
-          });
-        } catch (error) {
-          console.error("Fehler beim Laden der Edit-IDs:", error);
-          const container = document.getElementById("editIdsList");
-          container.innerHTML =
-            '<p class="error">Fehler beim Laden der Edit-IDs</p>';
-        }
-      }
-
-      // Load playground settings
       async function loadPlaygroundSettings() {
         try {
           const response = await fetch("/api/playground-settings");
           if (!response.ok) throw new Error("Failed to load settings");
           const settings = await response.json();
 
-          // Update UI with settings
           document.getElementById("playgroundToggle").checked =
             settings.enabled;
           document.getElementById("cooldownInput").value = settings.cooldown;
-
-          // Update banned users list
           updateBannedUsersList(settings.bannedUsers);
         } catch (error) {
           console.error("Error loading playground settings:", error);
@@ -712,7 +758,6 @@
         }
       }
 
-      // Update playground enabled state
       async function togglePlayground() {
         const enabled = document.getElementById("playgroundToggle").checked;
         try {
@@ -731,7 +776,6 @@
         }
       }
 
-      // Update cooldown time
       async function updateCooldown() {
         const cooldown = parseInt(
           document.getElementById("cooldownInput").value
@@ -756,7 +800,87 @@
         }
       }
 
-      // Ban a user
+      // Edit IDs Management
+      async function loadEditIds() {
+        try {
+          const response = await fetch("/api/edit-ids");
+          if (!response.ok)
+            throw new Error(`HTTP error! status: ${response.status}`);
+          const editIds = await response.json();
+
+          const container = document.getElementById("editIdsList");
+          container.innerHTML = "";
+
+          if (editIds.length === 0) {
+            container.innerHTML =
+              '<p style="color: #666;">Keine Edit-IDs vorhanden</p>';
+            return;
+          }
+
+          editIds.forEach((id) => {
+            const item = document.createElement("div");
+            item.className = "edit-id-item";
+            item.innerHTML = `
+        <span>${id}</span>
+        <button class="remove-btn" onclick="removeEditId('${id}')">Entfernen</button>
+      `;
+            container.appendChild(item);
+          });
+        } catch (error) {
+          console.error("Fehler beim Laden der Edit-IDs:", error);
+          document.getElementById("editIdsList").innerHTML =
+            '<p class="error">Fehler beim Laden der Edit-IDs</p>';
+        }
+      }
+
+      async function addEditId() {
+        const steamId = document.getElementById("steamId").value;
+        if (!steamId) {
+          alert("Bitte eine Steam ID eingeben");
+          return;
+        }
+
+        try {
+          const response = await fetch("/api/edit-ids", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ steamId, action: "add" }),
+          });
+
+          if (response.ok) {
+            document.getElementById("steamId").value = "";
+            loadEditIds();
+          } else {
+            const error = await response.json();
+            alert(`Fehler: ${error.error || "Unbekannter Fehler"}`);
+          }
+        } catch (error) {
+          console.error("Fehler beim Hinzufügen der Edit-ID:", error);
+          alert("Fehler beim Hinzufügen der Edit-ID");
+        }
+      }
+
+      async function removeEditId(steamId) {
+        try {
+          const response = await fetch("/api/edit-ids", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ steamId, action: "remove" }),
+          });
+
+          if (response.ok) {
+            loadEditIds();
+          } else {
+            const error = await response.json();
+            alert(`Fehler: ${error.error || "Unbekannter Fehler"}`);
+          }
+        } catch (error) {
+          console.error("Fehler beim Entfernen der Edit-ID:", error);
+          alert("Fehler beim Entfernen der Edit-ID");
+        }
+      }
+
+      // Ban Management
       async function banUser() {
         const steamId = document.getElementById("banInput").value.trim();
         if (!steamId) {
@@ -774,14 +898,13 @@
           if (!response.ok) throw new Error("Failed to ban user");
           document.getElementById("banInput").value = "";
           showNotification(`User ${steamId} banned`);
-          await loadPlaygroundSettings(); // Reload settings to update banned users list
+          await loadPlaygroundSettings();
         } catch (error) {
           console.error("Error banning user:", error);
           showNotification("Error banning user");
         }
       }
 
-      // Unban a user
       async function unbanUser(steamId) {
         try {
           const response = await fetch("/api/banned-users", {
@@ -792,14 +915,13 @@
 
           if (!response.ok) throw new Error("Failed to unban user");
           showNotification(`User ${steamId} unbanned`);
-          await loadPlaygroundSettings(); // Reload settings to update banned users list
+          await loadPlaygroundSettings();
         } catch (error) {
           console.error("Error unbanning user:", error);
           showNotification("Error unbanning user");
         }
       }
 
-      // Update banned users list in UI
       function updateBannedUsersList(bannedUsers) {
         const container = document.getElementById("bannedUsersList");
         container.innerHTML = "";
@@ -813,103 +935,26 @@
           const userElement = document.createElement("div");
           userElement.className = "banned-user";
           userElement.innerHTML = `
-            <span>${steamId}</span>
-            <button class="unban-button" onclick="unbanUser('${steamId}')">Unban</button>
-          `;
+      <span>${steamId}</span>
+      <button class="unban-button" onclick="unbanUser('${steamId}')">Unban</button>
+    `;
           container.appendChild(userElement);
         });
       }
 
-      // WebSocket handlers
-      ws.onopen = () => {
-        document.getElementById("status").innerHTML =
-          '<p class="success">Verbunden mit Server</p>';
-        // Request existing switches
-        ws.send(JSON.stringify({ type: "loadSwitches" }));
-        // Load edit IDs
-        loadEditIds();
-        // Load playground settings
-        loadPlaygroundSettings();
-      };
-
-      ws.onclose = () => {
-        document.getElementById("status").innerHTML =
-          '<p class="error">Verbindung zum Server getrennt</p>';
-      };
-
-      ws.onerror = () => {
-        document.getElementById("status").innerHTML =
-          '<p class="error">WebSocket Fehler aufgetreten</p>';
-      };
-
-      ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-
-        switch (data.type) {
-          case "switchesLoaded":
-            loadExistingSwitches(data.switches);
-            break;
-
-          case "addSwitch":
-            if (selectedCell) {
-              const position = selectedCell.dataset.position;
-              ws.send(
-                JSON.stringify({
-                  type: "confirmSwitch",
-                  switchData: data.switch,
-                  position: position,
-                })
-              );
-            } else {
-              showNotification(
-                "Bitte wählen Sie zuerst eine Position im Grid aus"
-              );
-            }
-            break;
-
-          case "addedSwitch":
-            const position = `${data.switch.position.row}-${data.switch.position.col}`;
-            addSwitch(data.switch, position);
-            selectedCell.classList.remove("selected");
-            selectedCell = null;
-            showNotification(`Switch "${data.switch.name}" wurde hinzugefügt`);
-            break;
-
-          case "switchStateChanged":
-            const button = document.querySelector(
-              `[data-switch-id="${data.switchId}"]`
-            );
-            if (button) {
-              button.classList.toggle("off", !data.state);
-              const switchData = switches.get(data.switchId);
-              if (switchData) {
-                switchData.lastState = data.state;
-              }
-            }
-            break;
-
-          case "switchRemoved":
-            const removedCell = document
-              .querySelector(`button[data-switch-id="${data.switchId}"]`)
-              .closest(".grid-cell");
-            if (removedCell) {
-              removedCell.innerHTML = "";
-              removedCell.classList.remove("occupied");
-              switches.delete(data.switchId);
-              showNotification("Switch wurde erfolgreich entfernt");
-            }
-            break;
-
-          case "error":
-            showNotification(data.message);
-            break;
+      // Cleanup bei Page Unload
+      window.addEventListener("beforeunload", () => {
+        if (ws) {
+          clearTimeout(ws.pingTimeout);
+          ws.close();
         }
-      };
+      });
 
-      // Initialize the grid when the page loads
+      // Initialisierung
       initializeGrid();
+      connect();
 
-      // Add event listener for playground toggle
+      // Event Listener für Playground Toggle
       document
         .getElementById("playgroundToggle")
         .addEventListener("change", togglePlayground);

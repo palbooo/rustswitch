@@ -19,7 +19,6 @@
         justify-content: center;
       }
 
-      /* Background image container */
       body::before {
         content: "";
         position: fixed;
@@ -42,7 +41,6 @@
         grid-template-rows: repeat(5, 42px);
         gap: 1px;
         margin: 2px 0;
-
         padding: 3px;
         border-radius: 4px;
         width: max-content;
@@ -94,12 +92,10 @@
           transform: scale(0.95);
           box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.7);
         }
-
         70% {
           transform: scale(1);
           box-shadow: 0 0 0 6px rgba(76, 175, 80, 0);
         }
-
         100% {
           transform: scale(0.95);
           box-shadow: 0 0 0 0 rgba(76, 175, 80, 0);
@@ -111,12 +107,10 @@
           transform: scale(0.95);
           box-shadow: 0 0 0 0 rgba(244, 67, 54, 0.7);
         }
-
         70% {
           transform: scale(1);
           box-shadow: 0 0 0 6px rgba(244, 67, 54, 0);
         }
-
         100% {
           transform: scale(0.95);
           box-shadow: 0 0 0 0 rgba(244, 67, 54, 0);
@@ -193,14 +187,12 @@
     </div>
 
     <script>
-      const ws = new WebSocket(
-        `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${
-          window.location.host
-        }`
-      );
+      let ws;
+      let reconnectAttempt = 0;
+      const MAX_RECONNECT_DELAY = 5000;
+      const switches = new Map();
       const grid = document.getElementById("switchGrid");
       const notification = document.getElementById("notification");
-      let switches = new Map();
 
       function showNotification(message) {
         notification.textContent = message;
@@ -262,49 +254,88 @@
         );
       }
 
-      // WebSocket handlers
-      ws.onopen = () => {
-        document.getElementById("status").className = "status";
-        ws.send(JSON.stringify({ type: "loadSwitches" }));
-      };
+      function connect() {
+        ws = new WebSocket(
+          `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${
+            window.location.host
+          }`
+        );
 
-      ws.onclose = () => {
-        document.getElementById("status").className = "status error";
-      };
+        // Ping timeout handling
+        ws.pingTimeout = null;
 
-      ws.onerror = () => {
-        document.getElementById("status").className = "status error";
-      };
+        function heartbeat() {
+          clearTimeout(ws.pingTimeout);
 
-      ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-
-        switch (data.type) {
-          case "switchesLoaded":
-            loadExistingSwitches(data.switches);
-            break;
-
-          case "switchStateChanged":
-            const button = document.querySelector(
-              `[data-switch-id="${data.switchId}"]`
-            );
-            if (button) {
-              button.classList.toggle("off", !data.state);
-              const switchData = switches.get(data.switchId);
-              if (switchData) {
-                switchData.lastState = data.state;
-              }
-            }
-            break;
-
-          case "error":
-            showNotification(data.message);
-            break;
+          // Warte 5s länger als das Server Ping-Intervall (15s + 5s = 20s)
+          ws.pingTimeout = setTimeout(() => {
+            console.log("WebSocket Verbindung timeout - schließe Verbindung");
+            ws.close();
+          }, 20000);
         }
-      };
 
-      // Initialize the grid when the page loads
+        ws.onopen = () => {
+          console.log("WebSocket verbunden");
+          document.getElementById("status").className = "status";
+          ws.send(JSON.stringify({ type: "loadSwitches" }));
+          reconnectAttempt = 0;
+          heartbeat();
+        };
+
+        ws.onclose = () => {
+          console.log("WebSocket getrennt");
+          document.getElementById("status").className = "status error";
+          clearTimeout(ws.pingTimeout);
+
+          // Exponentielles Backoff für Reconnect
+          const delay = Math.min(
+            1000 * Math.pow(2, reconnectAttempt),
+            MAX_RECONNECT_DELAY
+          );
+          console.log(`Versuche Reconnect in ${delay}ms...`);
+          setTimeout(() => {
+            reconnectAttempt++;
+            connect();
+          }, delay);
+        };
+
+        ws.onerror = (error) => {
+          console.error("WebSocket Fehler:", error);
+          document.getElementById("status").className = "status error";
+        };
+
+        ws.onmessage = (event) => {
+          heartbeat();
+
+          const data = JSON.parse(event.data);
+          switch (data.type) {
+            case "switchesLoaded":
+              loadExistingSwitches(data.switches);
+              break;
+
+            case "switchStateChanged":
+              const button = document.querySelector(
+                `[data-switch-id="${data.switchId}"]`
+              );
+              if (button) {
+                button.classList.toggle("off", !data.state);
+                const switchData = switches.get(data.switchId);
+                if (switchData) {
+                  switchData.lastState = data.state;
+                }
+              }
+              break;
+
+            case "error":
+              showNotification(data.message);
+              break;
+          }
+        };
+      }
+
+      // Initialize the grid and start WebSocket connection
       initializeGrid();
+      connect();
     </script>
   </body>
 </html>

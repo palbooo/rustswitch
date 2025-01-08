@@ -43,7 +43,7 @@ try {
   playgroundSettings = settings;
   bannedUsers = new Set(settings.bannedUsers || []);
 } catch (err) {
-  console.log("Keine gespeicherten Playground-Einstellungen gefunden");
+  console.log("No saved playground settings found");
 }
 
 // Funktion zum Speichern der Playground-Einstellungen
@@ -112,20 +112,20 @@ try {
   const configs = require("./rustplus_configs.json");
   rustPlusConfigs = new Map(Object.entries(configs));
 } catch (err) {
-  console.log("Keine gespeicherten RustPlus Konfigurationen gefunden");
+  console.log("No saved RustPlus configurations found");
 }
 
 try {
   fcmConfig = require("./rustplus.config.json");
 } catch (err) {
-  console.log("Keine FCM Konfiguration gefunden");
+  console.log("No FCM configuration found");
 }
 
 try {
   const savedEditIds = require("./editIds.json");
   editIds = new Set(savedEditIds);
 } catch (err) {
-  console.log("Keine gespeicherten Edit-IDs gefunden");
+  console.log("No saved edit IDs found");
 }
 
 // Save functions
@@ -166,7 +166,7 @@ async function initializeRustPlus(serverId) {
 
     // Set up event handlers
     rustplusInstance.on("connected", () => {
-      console.log(`RustPlus Verbindung hergestellt für Server ${serverId} `);
+      console.log(`RustPlus connection established for server ${serverId} `);
       console.log(config.playerToken);
 
       isConnected = true;
@@ -174,7 +174,7 @@ async function initializeRustPlus(serverId) {
 
     rustplusInstance.on("disconnected", () => {
       console.log(
-        `RustPlus Verbindung getrennt für Server ${serverId}, versuche neu zu verbinden...`
+        `RustPlus connection disconnected for server ${serverId}, trying to reconnect...`
       );
       isConnected = false;
       // Try to reconnect after 5 seconds
@@ -186,12 +186,12 @@ async function initializeRustPlus(serverId) {
     });
 
     rustplusInstance.on("error", (err) => {
-      console.error(`RustPlus Fehler für Server ${serverId}:`, err);
+      console.error(`RustPlus error for server ${serverId}:`, err);
       isConnected = false;
     });
 
     // Initial connection
-    console.log(`Verbinde mit RustPlus Server ${serverId}...`);
+    console.log(`Connecting to RustPlus Server ${serverId}...`);
     rustplusInstance.connect();
   }
 
@@ -201,13 +201,11 @@ async function initializeRustPlus(serverId) {
 // FCM Listener Functions
 async function startFCMListener() {
   if (!fcmConfig || !fcmConfig.fcm_credentials) {
-    console.error(
-      "FCM Credentials fehlen. Bitte zuerst fcm-register ausführen"
-    );
+    console.error("FCM Credentials missing. Please run fcm-register first");
     return;
   }
 
-  console.log("Starte FCM Listener für Pairing Notifications...");
+  console.log("Starting FCM Listener for Pairing Notifications...");
   const androidId = fcmConfig.fcm_credentials.gcm.androidId;
   const securityToken = fcmConfig.fcm_credentials.gcm.securityToken;
 
@@ -221,14 +219,14 @@ async function startFCMListener() {
   });
 
   await fcmClient.connect();
-  console.log("FCM Listener erfolgreich gestartet");
+  console.log("FCM Listener successfully started");
 }
 
 async function handlePairingNotification(data) {
   try {
     const notification = data.appData.find((item) => item.key === "body");
     if (!notification) {
-      console.log("Keine Body-Notification gefunden");
+      console.log("No body notification found");
       return;
     }
 
@@ -248,7 +246,7 @@ async function handlePairingNotification(data) {
     // Only update server configuration if all required fields are present
     if (hasAllServerConfig) {
       console.log(
-        "Alle Server-Konfigurationsdaten vorhanden, aktualisiere Konfiguration"
+        "All server configuration data present, updating configuration"
       );
 
       const updatedConfig = {
@@ -261,20 +259,18 @@ async function handlePairingNotification(data) {
       // Save the updated configuration
       rustPlusConfigs.set(serverId, updatedConfig);
       saveRustPlusConfigs();
-      console.log("Server-Konfiguration aktualisiert:", {
+      console.log("Server configuration updated:", {
         serverId,
         config: updatedConfig,
       });
 
       // Initialize new connection with updated configuration if needed
       if (rustplusInstance && rustplusInstance.serverId === serverId) {
-        console.log("Starte Verbindung neu mit aktualisiertem Token...");
+        console.log("Restarting connection with updated token...");
         await initializeRustPlus(serverId);
       }
     } else {
-      console.log(
-        "Unvollständige Server-Konfigurationsdaten, überspringe Aktualisierung"
-      );
+      console.log("Incomplete server configuration data, skipping update");
     }
 
     // Process Smart Switch independently of server config
@@ -284,7 +280,7 @@ async function handlePairingNotification(data) {
       notificationData.entityId // Make sure entityId exists
     ) {
       const switchId = `${serverId}-${notificationData.entityId}`;
-      console.log("Verarbeite Switch mit ID:", switchId);
+      console.log("Processing switch with ID:", switchId);
 
       const switchConfig = {
         id: switchId,
@@ -319,7 +315,7 @@ async function handlePairingNotification(data) {
       });
     }
   } catch (error) {
-    console.error("Fehler beim Verarbeiten der Pairing Notification:", error);
+    console.error("Error processing pairing notification:", error);
     console.error(error.stack);
   }
 }
@@ -328,17 +324,17 @@ async function toggleSmartSwitch(ip, port, entityId, state) {
   try {
     const serverId = `${ip}:${port}`;
     console.log(
-      `Versuche Switch zu schalten für Server ${serverId}, EntityID: ${entityId}`
+      `Attempting to toggle switch for server ${serverId}, EntityID: ${entityId}`
     );
 
     // Überprüfe ob die Server-Konfiguration existiert
     const config = rustPlusConfigs.get(serverId);
-    console.log("Aktuelle Server-Konfiguration:", {
+    console.log("Current server configuration:", {
       serverId,
       config,
     });
     if (!config) {
-      throw new Error(`Keine Konfiguration gefunden für Server ${serverId}`);
+      throw new Error(`No configuration found for server ${serverId}`);
     }
 
     // Verbindung zum richtigen Server herstellen
@@ -347,15 +343,15 @@ async function toggleSmartSwitch(ip, port, entityId, state) {
       rustplusInstance.serverId !== serverId ||
       !isConnected
     ) {
-      console.log(`Initialisiere neue Verbindung zu Server ${serverId}`);
+      console.log(`Initializing new connection to server ${serverId}`);
       await initializeRustPlus(serverId);
 
       // Warte auf Verbindung
       if (!isConnected) {
-        console.log("Warte auf Verbindungsaufbau...");
+        console.log("Waiting for connection...");
         await new Promise((resolve, reject) => {
           const timeout = setTimeout(() => {
-            reject(new Error("Verbindungs-Timeout"));
+            reject(new Error("Connection timeout"));
           }, 10000);
 
           const checkConnection = setInterval(() => {
@@ -370,8 +366,8 @@ async function toggleSmartSwitch(ip, port, entityId, state) {
     }
 
     console.log(
-      `Schalte Switch ${entityId} auf Server ${serverId} ${
-        state ? "an" : "aus"
+      `Toggling switch ${entityId} on Server ${serverId} ${
+        state ? "on" : "off"
       }...`
     );
 
@@ -384,18 +380,18 @@ async function toggleSmartSwitch(ip, port, entityId, state) {
         : rustplusInstance.turnSmartSwitchOff.bind(rustplusInstance);
 
       commandFunction(parsedEntityId, (message) => {
-        console.log("Switch-Antwort erhalten:", message);
+        console.log("Switch response received:", message);
         if (message.response && message.response.error) {
-          console.error(`Fehler vom Server: ${message.response.error.error}`);
+          console.error(`Error from server: ${message.response.error.error}`);
           reject(new Error(message.response.error.error));
         } else {
-          console.log("Switch erfolgreich geschaltet");
+          console.log("Switch successfully toggled");
           resolve(message);
         }
       });
     });
   } catch (error) {
-    console.error("Fehler beim Schalten:", error);
+    console.error("Error while toggling:", error);
     throw error;
   }
 }
@@ -411,9 +407,7 @@ app.get(
 
     // Prüfe ob User gebannt ist
     if (bannedUsers.has(steamId)) {
-      return res
-        .status(403)
-        .send("Du bist gebannt und kannst diesen Service nicht nutzen");
+      return res.status(403).send("You are banned and cannot use this service");
     }
 
     if (adminIds.has(steamId)) {
@@ -467,21 +461,21 @@ app.use(express.json());
 
 app.get("/api/switches", isAuthenticated, async (req, res) => {
   if (!adminIds.has(req.user.id) && !editIds.has(req.user.id)) {
-    return res.status(403).json({ error: "Keine Berechtigung" });
+    return res.status(403).json({ error: "No permission" });
   }
 
   try {
     const switches = await Switch.find({});
     res.json(switches);
   } catch (error) {
-    console.error("Fehler beim Laden der Switches:", error);
-    res.status(500).json({ error: "Fehler beim Laden der Switches" });
+    console.error("Error loading switches:", error);
+    res.status(500).json({ error: "Error loading switches" });
   }
 });
 
 app.get("/api/edit-ids", isAuthenticated, (req, res) => {
   if (!adminIds.has(req.user.id)) {
-    return res.status(403).json({ error: "Keine Berechtigung" });
+    return res.status(403).json({ error: "No permission" });
   }
   res.json([...editIds]);
 });
@@ -489,22 +483,22 @@ app.get("/api/edit-ids", isAuthenticated, (req, res) => {
 // Get switch logs
 app.get("/api/switch-logs", isAuthenticated, async (req, res) => {
   if (!adminIds.has(req.user.id)) {
-    return res.status(403).json({ error: "Keine Berechtigung" });
+    return res.status(403).json({ error: "No permission" });
   }
 
   try {
     const logs = await SwitchLog.find({}).sort({ timestamp: -1 }).limit(100); // Limit to last 100 entries
     res.json(logs);
   } catch (error) {
-    console.error("Fehler beim Laden der Switch-Logs:", error);
-    res.status(500).json({ error: "Fehler beim Laden der Switch-Logs" });
+    console.error("Error loading switch logs:", error);
+    res.status(500).json({ error: "Error loading switch logs" });
   }
 });
 
 // Playground Settings API
 app.get("/api/playground-settings", isAuthenticated, (req, res) => {
   if (!adminIds.has(req.user.id)) {
-    return res.status(403).json({ error: "Keine Berechtigung" });
+    return res.status(403).json({ error: "No permission" });
   }
   res.json({
     enabled: playgroundSettings.enabled,
@@ -515,7 +509,7 @@ app.get("/api/playground-settings", isAuthenticated, (req, res) => {
 
 app.post("/api/playground-settings", isAuthenticated, (req, res) => {
   if (!adminIds.has(req.user.id)) {
-    return res.status(403).json({ error: "Keine Berechtigung" });
+    return res.status(403).json({ error: "No permission" });
   }
 
   if (typeof req.body.enabled === "boolean") {
@@ -532,7 +526,7 @@ app.post("/api/playground-settings", isAuthenticated, (req, res) => {
 // Banned Users API
 app.post("/api/banned-users", isAuthenticated, (req, res) => {
   if (!adminIds.has(req.user.id)) {
-    return res.status(403).json({ error: "Keine Berechtigung" });
+    return res.status(403).json({ error: "No permission" });
   }
 
   const { steamId, action } = req.body;
@@ -549,7 +543,7 @@ app.post("/api/banned-users", isAuthenticated, (req, res) => {
 
 app.post("/api/edit-ids", isAuthenticated, express.json(), (req, res) => {
   if (!adminIds.has(req.user.id)) {
-    return res.status(403).json({ error: "Keine Berechtigung" });
+    return res.status(403).json({ error: "No permission" });
   }
 
   const { steamId, action } = req.body;
@@ -568,8 +562,8 @@ app.post("/api/edit-ids", isAuthenticated, express.json(), (req, res) => {
 wss.on("connection", function connection(ws, req) {
   const userSteamId = req.user?.id;
   if (!userSteamId) {
-    console.log("Verbindung abgelehnt: Keine User-ID");
-    ws.close(4001, "Nicht authentifiziert");
+    console.log("Connection rejected: No user ID");
+    ws.close(4001, "Not authenticated");
     return;
   }
 
@@ -599,7 +593,7 @@ wss.on("connection", function connection(ws, req) {
     avatarUrl: req.user._json.avatarmedium,
   };
 
-  console.log(`Neuer Client verbunden: ${userRole}, ID: ${userSteamId}`);
+  console.log(`New client connected: ${userRole}, ID: ${userSteamId}`);
 
   ws.send(
     JSON.stringify({
@@ -613,6 +607,16 @@ wss.on("connection", function connection(ws, req) {
     try {
       const data = JSON.parse(message);
       const userSteamId = ws.userInfo?.steamId;
+
+      if (data.type === "ping") {
+        ws.send(
+          JSON.stringify({
+            type: "pong",
+            timestamp: Date.now(),
+          })
+        );
+        return;
+      }
 
       // Prüfe zuerst ob User gebannt ist
       if (bannedUsers.has(userSteamId)) {
@@ -642,7 +646,7 @@ wss.on("connection", function connection(ws, req) {
             ws.send(
               JSON.stringify({
                 type: "error",
-                message: "Playground ist deaktiviert",
+                message: "Playground is disabled",
               })
             );
             return;
@@ -691,7 +695,7 @@ wss.on("connection", function connection(ws, req) {
               ws.send(
                 JSON.stringify({
                   type: "error",
-                  message: `Bitte warte noch ${remainingTime} Sekunden`,
+                  message: `Please wait ${remainingTime} seconds`,
                 })
               );
               return;
@@ -705,7 +709,7 @@ wss.on("connection", function connection(ws, req) {
             ws.send(
               JSON.stringify({
                 type: "error",
-                message: "Keine Berechtigung",
+                message: "No permission",
               })
             );
             return;
@@ -755,7 +759,7 @@ wss.on("connection", function connection(ws, req) {
             ws.send(
               JSON.stringify({
                 type: "error",
-                message: "Fehler beim Schalten des Switch",
+                message: "Error toggling the switch",
               })
             );
           }
@@ -766,7 +770,7 @@ wss.on("connection", function connection(ws, req) {
             ws.send(
               JSON.stringify({
                 type: "error",
-                message: "Keine Berechtigung",
+                message: "No permission",
               })
             );
             return;
@@ -785,7 +789,7 @@ wss.on("connection", function connection(ws, req) {
               ws.send(
                 JSON.stringify({
                   type: "error",
-                  message: "Position bereits belegt",
+                  message: "Position already occupied",
                 })
               );
               return;
@@ -821,11 +825,11 @@ wss.on("connection", function connection(ws, req) {
               }
             });
           } catch (error) {
-            console.error("Fehler beim Speichern des Switch:", error);
+            console.error("Error saving the switch:", error);
             ws.send(
               JSON.stringify({
                 type: "error",
-                message: "Fehler beim Speichern des Switch",
+                message: "Error saving the switch",
               })
             );
           }
@@ -836,7 +840,7 @@ wss.on("connection", function connection(ws, req) {
             ws.send(
               JSON.stringify({
                 type: "error",
-                message: "Keine Berechtigung",
+                message: "No permission",
               })
             );
             return;
@@ -866,23 +870,23 @@ wss.on("connection", function connection(ws, req) {
               ws.send(
                 JSON.stringify({
                   type: "error",
-                  message: "Switch nicht gefunden",
+                  message: "Switch not found",
                 })
               );
             }
           } catch (error) {
-            console.error("Fehler beim Entfernen des Switch:", error);
+            console.error("Error removing the switch:", error);
             ws.send(
               JSON.stringify({
                 type: "error",
-                message: "Fehler beim Entfernen des Switch",
+                message: "Error removing the switch",
               })
             );
           }
           break;
       }
     } catch (err) {
-      console.error("Fehler beim Verarbeiten der WebSocket Nachricht:", err);
+      console.error("Error processing WebSocket message:", err);
     }
   });
 });
@@ -910,14 +914,14 @@ app.use(express.static("public"));
 // Server starten
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, async () => {
-  console.log(`Server läuft auf Port ${PORT}`);
+  console.log(`Server running on port: ${PORT}`);
 
   try {
     // Start nur den FCM Listener
     await startFCMListener();
-    console.log("FCM Listener gestartet");
+    console.log("FCM Listener started");
   } catch (error) {
-    console.error("Fehler beim Starten der Services:", error);
+    console.error("Error starting services:", error);
   }
 });
 
@@ -926,9 +930,9 @@ function cleanup() {
   if (rustplusInstance) {
     try {
       rustplusInstance.disconnect();
-      console.log("RustPlus Verbindung getrennt");
+      console.log("RustPlus connection disconnected");
     } catch (error) {
-      console.error("Fehler beim Trennen der RustPlus Verbindung:", error);
+      console.error("Error disconnecting RustPlus connection:", error);
     }
     rustplusInstance = null;
     isConnected = false;
@@ -937,13 +941,13 @@ function cleanup() {
 
 // Add cleanup handling
 process.on("SIGINT", () => {
-  console.log("Server wird heruntergefahren...");
+  console.log("Server shutting down...");
   cleanup();
   process.exit(0);
 });
 
 process.on("SIGTERM", () => {
-  console.log("Server wird heruntergefahren...");
+  console.log("Server shutting down...");
   cleanup();
   process.exit(0);
 });

@@ -19,6 +19,7 @@
         justify-content: center;
       }
 
+      /* Background image container */
       body::before {
         content: "";
         position: fixed;
@@ -92,10 +93,12 @@
           transform: scale(0.95);
           box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.7);
         }
+
         70% {
           transform: scale(1);
           box-shadow: 0 0 0 6px rgba(76, 175, 80, 0);
         }
+
         100% {
           transform: scale(0.95);
           box-shadow: 0 0 0 0 rgba(76, 175, 80, 0);
@@ -107,10 +110,12 @@
           transform: scale(0.95);
           box-shadow: 0 0 0 0 rgba(244, 67, 54, 0.7);
         }
+
         70% {
           transform: scale(1);
           box-shadow: 0 0 0 6px rgba(244, 67, 54, 0);
         }
+
         100% {
           transform: scale(0.95);
           box-shadow: 0 0 0 0 rgba(244, 67, 54, 0);
@@ -187,12 +192,53 @@
     </div>
 
     <script>
-      let ws;
-      let reconnectAttempt = 0;
-      const MAX_RECONNECT_DELAY = 5000;
-      const switches = new Map();
+      const ws = new WebSocket(
+        `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${
+          window.location.host
+        }`
+      );
       const grid = document.getElementById("switchGrid");
       const notification = document.getElementById("notification");
+      let switches = new Map();
+
+      // Ping-pong variables
+      let pingInterval = null;
+      let pongTimeout = null;
+      const PING_INTERVAL = 30000; // Send ping every 30 seconds
+      const PONG_TIMEOUT = 5000; // Wait 5 seconds for pong response
+
+      function startPingPong() {
+        console.log("Starting ping interval");
+        pingInterval = setInterval(() => {
+          console.log(
+            "Interval triggered, checking connection state:",
+            ws.readyState
+          );
+          if (ws.readyState === WebSocket.OPEN) {
+            console.log("Sending ping...");
+            ws.send(JSON.stringify({ type: "ping" }));
+
+            pongTimeout = setTimeout(() => {
+              console.log("Pong timeout - connection may be dead");
+              document.getElementById("status").className = "status error";
+              ws.close();
+            }, PONG_TIMEOUT);
+          } else {
+            console.log("WebSocket not open, readyState:", ws.readyState);
+          }
+        }, PING_INTERVAL);
+      }
+
+      function stopPingPong() {
+        if (pingInterval) {
+          clearInterval(pingInterval);
+          pingInterval = null;
+        }
+        if (pongTimeout) {
+          clearTimeout(pongTimeout);
+          pongTimeout = null;
+        }
+      }
 
       function showNotification(message) {
         notification.textContent = message;
@@ -254,88 +300,60 @@
         );
       }
 
-      function connect() {
-        ws = new WebSocket(
-          `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${
-            window.location.host
-          }`
-        );
+      // WebSocket handlers
+      ws.onopen = () => {
+        document.getElementById("status").className = "status";
+        ws.send(JSON.stringify({ type: "loadSwitches" }));
+        startPingPong(); // Start ping-pong when connection opens
+      };
 
-        // Ping timeout handling
-        ws.pingTimeout = null;
+      ws.onclose = () => {
+        document.getElementById("status").className = "status error";
+        stopPingPong(); // Stop ping-pong when connection closes
+      };
 
-        function heartbeat() {
-          clearTimeout(ws.pingTimeout);
+      ws.onerror = () => {
+        document.getElementById("status").className = "status error";
+        stopPingPong(); // Stop ping-pong on error
+      };
 
-          // Warte 5s länger als das Server Ping-Intervall (15s + 5s = 20s)
-          ws.pingTimeout = setTimeout(() => {
-            console.log("WebSocket Verbindung timeout - schließe Verbindung");
-            ws.close();
-          }, 20000);
-        }
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
 
-        ws.onopen = () => {
-          console.log("WebSocket verbunden");
-          document.getElementById("status").className = "status";
-          ws.send(JSON.stringify({ type: "loadSwitches" }));
-          reconnectAttempt = 0;
-          heartbeat();
-        };
+        switch (data.type) {
+          case "pong":
+            // Clear the pong timeout since we received a response
+            if (pongTimeout) {
+              clearTimeout(pongTimeout);
+              pongTimeout = null;
+            }
+            break;
 
-        ws.onclose = () => {
-          console.log("WebSocket getrennt");
-          document.getElementById("status").className = "status error";
-          clearTimeout(ws.pingTimeout);
+          case "switchesLoaded":
+            loadExistingSwitches(data.switches);
+            break;
 
-          // Exponentielles Backoff für Reconnect
-          const delay = Math.min(
-            1000 * Math.pow(2, reconnectAttempt),
-            MAX_RECONNECT_DELAY
-          );
-          console.log(`Versuche Reconnect in ${delay}ms...`);
-          setTimeout(() => {
-            reconnectAttempt++;
-            connect();
-          }, delay);
-        };
-
-        ws.onerror = (error) => {
-          console.error("WebSocket Fehler:", error);
-          document.getElementById("status").className = "status error";
-        };
-
-        ws.onmessage = (event) => {
-          heartbeat();
-
-          const data = JSON.parse(event.data);
-          switch (data.type) {
-            case "switchesLoaded":
-              loadExistingSwitches(data.switches);
-              break;
-
-            case "switchStateChanged":
-              const button = document.querySelector(
-                `[data-switch-id="${data.switchId}"]`
-              );
-              if (button) {
-                button.classList.toggle("off", !data.state);
-                const switchData = switches.get(data.switchId);
-                if (switchData) {
-                  switchData.lastState = data.state;
-                }
+          case "switchStateChanged":
+            const button = document.querySelector(
+              `[data-switch-id="${data.switchId}"]`
+            );
+            if (button) {
+              button.classList.toggle("off", !data.state);
+              const switchData = switches.get(data.switchId);
+              if (switchData) {
+                switchData.lastState = data.state;
               }
-              break;
+            }
+            break;
 
-            case "error":
-              showNotification(data.message);
-              break;
-          }
-        };
-      }
+          case "error":
+            showNotification(data.message);
+            break;
+        }
+      };
 
-      // Initialize the grid and start WebSocket connection
+      // Initialize the grid when the page loads
       initializeGrid();
-      connect();
     </script>
   </body>
 </html>
